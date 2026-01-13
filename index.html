@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
@@ -288,4 +288,98 @@
         connectToServer();
     </script>
 </body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Rose Gift Overlay</title>
+
+<style>
+    html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent; /* QUAN TRỌNG */
+        overflow: hidden;
+    }
+
+    /* Container giữ tỷ lệ 9:16 */
+    .stage {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: transparent;
+    }
+
+    .video-wrapper {
+        position: relative;
+        width: 100%;
+        max-width: calc(100vh * 9 / 16);
+        aspect-ratio: 9 / 16;
+        background: transparent;
+    }
+
+    video {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: none; /* Mặc định ẨN */
+        pointer-events: none;
+    }
+</style>
+</head>
+
+<body>
+
+<div class="stage">
+    <div class="video-wrapper">
+        <video id="roseVideo" src="https://vutringocanh.github.io/video/video.mp4"></video>
+    </div>
+</div>
+
+<script>
+    const video = document.getElementById("roseVideo");
+
+    function playRoseVideo() {
+        if (!video.paused) return; // tránh spam
+        video.style.display = "block";
+        video.currentTime = 0;
+        video.play();
+    }
+
+    video.addEventListener("ended", () => {
+        video.style.display = "none"; // Trả về trong suốt
+    });
+
+    // ===============================
+    // KẾT NỐI SERVER SSE / WEBSOCKET
+    // ===============================
+    const eventSource = new EventSource("http://localhost:5001/events");
+
+    eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        // Kiểm tra quà ROSE
+        if (
+            data.type === "gift" &&
+            data.gift &&
+            data.gift.toLowerCase() === "Rose"
+        ) {
+            playRoseVideo();
+        }
+    };
+
+    eventSource.onerror = () => {
+        console.warn("Mất kết nối SSE");
+    };
+</script>
+
+</body>
 </html>
+
