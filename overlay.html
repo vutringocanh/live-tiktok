@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TikTok Gift Overlay</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: transparent;
+            font-family: 'Arial', sans-serif;
+        }
+
+        /* ========== VIDEO OVERLAY ========== */
+        #overlay-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            background: transparent;
+        }
+
+        #overlay-container.active {
+            display: flex;
+        }
+
+        #gift-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* ========== GIFT NOTIFICATION ========== */
+        .gift-notification {
+            position: fixed;
+            top: 20%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(135deg, #FF6B6B 0%, #FFE66D 100%);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 15px;
+            font-size: 1.8em;
+            font-weight: bold;
+            text-align: center;
+            box-shadow: 0 10px 50px rgba(0,0,0,0.5);
+            animation: popIn 0.5s ease;
+            z-index: 10000;
+            display: none;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .gift-notification.show {
+            display: block;
+        }
+
+        @keyframes popIn {
+            0% {
+                transform: translate(-50%, -50%) scale(0) rotate(-180deg);
+                opacity: 0;
+            }
+            50% {
+                transform: translate(-50%, -50%) scale(1.2) rotate(10deg);
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(1) rotate(0deg);
+                opacity: 1;
+            }
+        }
+
+        /* ========== DEBUG PANEL ========== */
+        #debug {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            color: lime;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            border-radius: 8px;
+            display: none;
+            z-index: 10001;
+            min-width: 250px;
+            border: 2px solid lime;
+        }
+
+        #debug.show {
+            display: block;
+        }
+
+        #debug div {
+            margin: 5px 0;
+        }
+
+        #debug .label {
+            color: #FFD700;
+            font-weight: bold;
+        }
+
+        /* ========== LOADING INDICATOR ========== */
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 1.5em;
+            text-shadow: 0 0 10px rgba(0,0,0,0.5);
+            display: none;
+            z-index: 9998;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Video Overlay Container -->
+    <div id="overlay-container">
+        <video id="gift-video" preload="auto" playsinline></video>
+    </div>
+
+    <!-- Gift Notification -->
+    <div class="gift-notification" id="notification"></div>
+
+    <!-- Loading Indicator -->
+    <div class="loading" id="loading">Đang kết nối</div>
+
+    <!-- Debug Panel -->
+    <div id="debug">
+        <div><span class="label">Status:</span> <span id="status">Disconnected</span></div>
+        <div><span class="label">Server:</span> <span id="server-url">-</span></div>
+        <div><span class="label">Last Gift:</span> <span id="last-gift">None</span></div>
+        <div><span class="label">Queue:</span> <span id="queue-count">0</span></div>
+        <div><span class="label">Video URL:</span> <span id="video-url">-</span></div>
+    </div>
+
+    <script>
+        // ==========================================
+        // CẤU HÌNH
+        // ==========================================
+        const CONFIG = {
+            // URL của server Node.js (chạy trên máy tính)
+            serverUrl: 'http://localhost:5001/events',
+            
+            // Mapping tên quà → URL video
+            gifts: {
+                'Rose': 'https://vutringocanh.github.io/video/rose.mp4',
+                'TikTok': 'https://vutringocanh.github.io/video/tiktok.mp4',
+                'Heart': 'https://vutringocanh.github.io/video/heart.mp4',
+                'Galaxy': 'https://vutringocanh.github.io/video/galaxy.mp4',
+                'default': 'https://vutringocanh.github.io/video/default.mp4'
+            },
+            
+            // Hiện text notification khi nhận quà
+            showNotification: true,
+            
+            // Thời gian hiện notification (ms)
+            notificationDuration: 3000,
+            
+            // Delay giữa các video (ms)
+            videoDelay: 500,
+            
+            // Debug mode (bật để test)
+            debug: true
+        };
+
+        // ==========================================
+        // DOM ELEMENTS
+        // ==========================================
+        const container = document.getElementById('overlay-container');
+        const video = document.getElementById('gift-video');
+        const notification = document.getElementById('notification');
+        const loading = document.getElementById('loading');
+        const debugPanel = document.getElementById('debug');
+        
+        // Debug elements
+        const statusEl = document.getElementById('status');
+        const serverUrlEl = document.getElementById('server-url');
+        const lastGiftEl = document.getElementById('last-gift');
+        const queueCountEl = document.getElementById('queue-count');
+        const videoUrlEl = document.getElementById('video-url');
+
+        // ==========================================
+        // STATE
+        // ==========================================
+        let eventSource = null;
+        let giftQueue = [];
+        let isPlaying = false;
+        let reconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 10;
+
+        // ==========================================
+        // INITIALIZATION
+        // ==========================================
+        function init() {
+            log('🚀 TikTok Gift Overlay Starting...');
+            
+            // Show debug panel if enabled
+            if (CONFIG.debug) {
+                debugPanel.classList.add('show');
+                serverUrlEl.textContent = CONFIG.serverUrl;
+            }
+            
+            // Preload videos
+            preloadVideos();
+            
+            // Connect to server
+            connectToServer();
+            
+            // Setup video event listeners
+            setupVideoListeners();
+        }
+
+        // ==========================================
+        // SERVER CONNECTION
+        // ==========================================
+        function connectToServer() {
+            log('📡 Connecting to server...');
+            loading.classList.add('show');
+            
+            try {
+                eventSource = new EventSource(CONFIG.serverUrl);
+
+                eventSource.onopen = () => {
+                    reconnectAttempts = 0;
+                    loading.classList.remove('show');
+                    updateDebug('Connected', 'lime');
+                    log('✅ Connected to server');
+                };
+
+                eventSource.onerror = () => {
+                    loading.classList.add('show');
+                    updateDebug('Disconnected', 'red');
+                    log('❌ Connection lost');
+                    
+                    eventSource.close();
+                    
+                    // Retry connection
+                    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                        reconnectAttempts++;
+                        const delay = Math.min(1000 * reconnectAttempts, 5000);
+                        log(`🔄 Reconnecting in ${delay/1000}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+                        setTimeout(connectToServer, delay);
+                    } else {
+                        log('❌ Max reconnection attempts reached');
+                        loading.textContent = 'Không thể kết nối server';
+                    }
+                };
+
+                eventSource.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        handleMessage(data);
+                    } catch (err) {
+                        log('❌ Error parsing message:', err);
+                    }
+                };
+
+            } catch (err) {
+                log('❌ Connection error:', err);
+                loading.textContent = 'Lỗi kết nối';
+            }
+        }
+
+        // ==========================================
+        // MESSAGE HANDLER
+        // ==========================================
+        function handleMessage(data) {
+            log('📨 Received:', data.type);
+
+            if (data.type === 'gift') {
+                const giftName = data.gift;
+                const count = data.count || 1;
+                const username = data.username;
+
+                log(`🎁 ${username} sent ${giftName} x${count}`);
+
+                // Add to queue (repeat by count)
+                for (let i = 0; i < count; i++) {
+                    giftQueue.push({
+                        gift: giftName,
+                        username: username
+                    });
+                }
+
+                updateDebug('Connected', 'lime', giftName, giftQueue.length);
+
+                // Start playing if not already playing
+                if (!isPlaying) {
+                    playNextGift();
+                }
+            }
+
+            // Log other events
+            if (data.type === 'comment') {
+                log(`💬 ${data.username}: ${data.text}`);
+            }
+            if (data.type === 'system') {
+                log(`ℹ️ ${data.message}`);
+            }
+        }
+
+        // ==========================================
+        // VIDEO PLAYBACK
+        // ==========================================
+        function playNextGift() {
+            if (giftQueue.length === 0) {
+                isPlaying = false;
+                updateDebug('Connected', 'lime', 'None', 0);
+                log('✅ Queue empty');
+                return;
+            }
+
+            isPlaying = true;
+            const giftData = giftQueue.shift();
+            const videoUrl = CONFIG.gifts[giftData.gift] || CONFIG.gifts['default'];
+
+            log(`▶️ Playing: ${giftData.gift}`);
+
+            // Show notification
+            if (CONFIG.showNotification) {
+                showNotification(`🎁 ${giftData.username} tặng ${giftData.gift}!`);
+            }
+
+            // Load and play video
+            video.src = videoUrl;
+            container.classList.add('active');
+
+            video.play().catch(err => {
+                log('❌ Video play error:', err);
+                onVideoEnded(); // Skip to next
+            });
+
+            updateDebug('Connected', 'lime', giftData.gift, giftQueue.length, videoUrl);
+        }
+
+        // ==========================================
+        // VIDEO EVENT HANDLERS
+        // ==========================================
+        function setupVideoListeners() {
+            video.onended = onVideoEnded;
+            
+            video.onerror = (e) => {
+                log('❌ Video error:', e);
+                log('Failed URL:', video.src);
+                onVideoEnded(); // Skip to next
+            };
+
+            video.onloadstart = () => {
+                log('⏳ Loading video...');
+            };
+
+            video.oncanplay = () => {
+                log('✅ Video ready');
+            };
+        }
+
+        function onVideoEnded() {
+            log('✅ Video finished');
+            
+            // Hide overlay
+            container.classList.remove('active');
+            video.src = '';
+
+            // Play next video after delay
+            setTimeout(() => {
+                playNextGift();
+            }, CONFIG.videoDelay);
+        }
+
+        // ==========================================
+        // NOTIFICATION
+        // ==========================================
+        function showNotification(text) {
+            notification.textContent = text;
+            notification.classList.add('show');
+
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, CONFIG.notificationDuration);
+        }
+
+        // ==========================================
+        // VIDEO PRELOADING
+        // ==========================================
+        function preloadVideos() {
+            log('📥 Preloading videos...');
+            Object.entries(CONFIG.gifts).forEach(([name, url]) => {
+                const preloadVideo = document.createElement('video');
+                preloadVideo.src = url;
+                preloadVideo.preload = 'auto';
+                log(`  - ${name}: ${url}`);
+            });
+        }
+
+        // ==========================================
+        // DEBUG FUNCTIONS
+        // ==========================================
+        function updateDebug(status, color, gift = 'None', queueCount = 0, videoUrl = '-') {
+            if (!CONFIG.debug) return;
+            
+            statusEl.textContent = status;
+            statusEl.style.color = color;
+            lastGiftEl.textContent = gift;
+            queueCountEl.textContent = queueCount;
+            if (videoUrl !== '-') {
+                videoUrlEl.textContent = videoUrl.substring(0, 50) + '...';
+            }
+        }
+
+        function log(...args) {
+            if (CONFIG.debug) {
+                console.log('[TikTok Overlay]', ...args);
+            }
+        }
+
+        // ==========================================
+        // KEYBOARD SHORTCUTS (for testing)
+        // ==========================================
+        document.addEventListener('keydown', (e) => {
+            if (!CONFIG.debug) return;
+
+            // Press 'T' to test gift
+            if (e.key === 't' || e.key === 'T') {
+                log('🧪 Manual test triggered');
+                giftQueue.push({
+                    gift: 'Rose',
+                    username: 'Test User'
+                });
+                if (!isPlaying) playNextGift();
+            }
+
+            // Press 'D' to toggle debug
+            if (e.key === 'd' || e.key === 'D') {
+                debugPanel.classList.toggle('show');
+            }
+
+            // Press 'C' to clear queue
+            if (e.key === 'c' || e.key === 'C') {
+                giftQueue = [];
+                updateDebug('Connected', 'lime', 'None', 0);
+                log('🗑️ Queue cleared');
+            }
+        });
+
+        // ==========================================
+        // START APPLICATION
+        // ==========================================
+        window.addEventListener('DOMContentLoaded', init);
+
+        // ==========================================
+        // ERROR HANDLING
+        // ==========================================
+        window.addEventListener('error', (e) => {
+            log('❌ Window error:', e.message);
+        });
+
+        window.addEventListener('unhandledrejection', (e) => {
+            log('❌ Unhandled rejection:', e.reason);
+        });
+    </script>
+</body>
+</html>

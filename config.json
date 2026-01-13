@@ -1,0 +1,37 @@
+{
+  "version": "1.0.0",
+  "description": "TikTok Live Gift Overlay Configuration",
+  "gifts": {
+    "Rose": {
+      "video": "https://vutringocanh.github.io/video/rose.mp4",
+      "sound": true,
+      "duration": 3
+    },
+    "TikTok": {
+      "video": "https://vutringocanh.github.io/video/tiktok.mp4",
+      "sound": true,
+      "duration": 4
+    },
+    "Heart": {
+      "video": "https://vutringocanh.github.io/video/heart.mp4",
+      "sound": false,
+      "duration": 3
+    },
+    "Galaxy": {
+      "video": "https://vutringocanh.github.io/video/galaxy.mp4",
+      "sound": true,
+      "duration": 5
+    },
+    "default": {
+      "video": "https://vutringocanh.github.io/video/default.mp4",
+      "sound": true,
+      "duration": 3
+    }
+  },
+  "settings": {
+    "showNotification": true,
+    "notificationDuration": 3000,
+    "videoDelay": 500,
+    "debug": false
+  }
+}
