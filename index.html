@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TikTok LIVE Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            margin-bottom: 10px;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 8px 20px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+
+        .status.connected {
+            background: rgba(46, 213, 115, 0.3);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .box {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 15px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            min-height: 400px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .box h2 {
+            margin-bottom: 15px;
+            font-size: 1.3em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .message {
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.1);
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .message.comment {
+            border-left: 4px solid #3498db;
+        }
+
+        .message.gift {
+            border-left: 4px solid #f39c12;
+            background: rgba(243, 156, 18, 0.2);
+        }
+
+        .message.join {
+            border-left: 4px solid #2ecc71;
+        }
+
+        .message.follow {
+            border-left: 4px solid #e74c3c;
+        }
+
+        .username {
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        .text {
+            margin-top: 5px;
+            line-height: 1.5;
+        }
+
+        .time {
+            font-size: 0.8em;
+            color: rgba(255,255,255,0.6);
+        }
+
+        .box::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .box::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+        }
+
+        .box::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.3);
+            border-radius: 10px;
+        }
+
+        .box::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.5);
+        }
+
+        .controls {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 12px 30px;
+            background: rgba(255,255,255,0.2);
+            border: 2px solid white;
+            color: white;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+            margin: 0 10px;
+        }
+
+        button:hover {
+            background: white;
+            color: #667eea;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎥 TikTok LIVE Viewer</h1>
+            <div class="status" id="status">⚪ Đang kết nối...</div>
+        </header>
+
+        <div class="grid">
+            <div class="box">
+                <h2>💬 Comments</h2>
+                <div id="comments"></div>
+            </div>
+
+            <div class="box">
+                <h2>🎁 Gifts</h2>
+                <div id="gifts"></div>
+            </div>
+
+            <div class="box">
+                <h2>👋 Join & Follow</h2>
+                <div id="events"></div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button onclick="clearAll()">🗑️ Xóa tất cả</button>
+            <button onclick="location.reload()">🔄 Làm mới</button>
+        </div>
+    </div>
+
+    <script>
+        const commentsBox = document.getElementById('comments');
+        const giftsBox = document.getElementById('gifts');
+        const eventsBox = document.getElementById('events');
+        const statusEl = document.getElementById('status');
+
+        let eventSource;
+
+        function connectToServer() {
+            eventSource = new EventSource('http://localhost:5001/events');
+
+            eventSource.onopen = () => {
+                statusEl.textContent = '🟢 Đã kết nối';
+                statusEl.classList.add('connected');
+            };
+
+            eventSource.onerror = () => {
+                statusEl.textContent = '🔴 Mất kết nối - Đang thử lại...';
+                statusEl.classList.remove('connected');
+                
+                setTimeout(() => {
+                    eventSource.close();
+                    connectToServer();
+                }, 3000);
+            };
+
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleMessage(data);
+            };
+        }
+
+        function handleMessage(data) {
+            const time = new Date().toLocaleTimeString('vi-VN');
+
+            switch(data.type) {
+                case 'comment':
+                    addMessage(commentsBox, 'comment', `
+                        <span class="time">${time}</span>
+                        <div><span class="username">${data.username}</span>: ${data.text}</div>
+                    `);
+                    break;
+
+                case 'gift':
+                    addMessage(giftsBox, 'gift', `
+                        <span class="time">${time}</span>
+                        <div>🎁 <span class="username">${data.username}</span> → ${data.gift} x${data.count}</div>
+                    `);
+                    break;
+
+                case 'join':
+                    addMessage(eventsBox, 'join', `
+                        <span class="time">${time}</span>
+                        <div>👋 <span class="username">${data.username}</span> đã vào phòng</div>
+                    `);
+                    break;
+
+                case 'follow':
+                    addMessage(eventsBox, 'follow', `
+                        <span class="time">${time}</span>
+                        <div>❤️ <span class="username">${data.username}</span> đã follow</div>
+                    `);
+                    break;
+
+                case 'system':
+                    console.log('System:', data.message);
+                    break;
+            }
+        }
+
+        function addMessage(container, className, html) {
+            const msg = document.createElement('div');
+            msg.className = `message ${className}`;
+            msg.innerHTML = html;
+            container.insertBefore(msg, container.firstChild);
+
+            // Giới hạn 50 tin nhắn
+            if (container.children.length > 50) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        function clearAll() {
+            commentsBox.innerHTML = '';
+            giftsBox.innerHTML = '';
+            eventsBox.innerHTML = '';
+        }
+
+        // Kết nối khi load trang
+        connectToServer();
+    </script>
+</body>
+</html>
