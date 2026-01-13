@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TikTok Gift Test Panel</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.9em;
+        }
+
+        .status {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.connected {
+            background: #4CAF50;
+        }
+
+        .status-indicator.disconnected {
+            background: #f44336;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .gift-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .gift-btn {
+            padding: 20px;
+            border: none;
+            border-radius: 15px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: white;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .gift-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        .gift-btn:active {
+            transform: translateY(0);
+        }
+
+        .gift-btn.rose {
+            background: linear-gradient(135deg, #FF6B6B, #FF5252);
+        }
+
+        .gift-btn.tiktok {
+            background: linear-gradient(135deg, #00F2EA, #FF0050);
+        }
+
+        .gift-btn.heart {
+            background: linear-gradient(135deg, #FF416C, #FF4B2B);
+        }
+
+        .gift-btn.galaxy {
+            background: linear-gradient(135deg, #654EA3, #EAAFC8);
+        }
+
+        .server-url {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 0.85em;
+            word-break: break-all;
+            color: #666;
+        }
+
+        .server-url strong {
+            color: #333;
+        }
+
+        .log {
+            background: #000;
+            color: #0f0;
+            padding: 15px;
+            border-radius: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            margin-top: 20px;
+        }
+
+        .log-entry {
+            margin: 3px 0;
+        }
+
+        .log-entry.success { color: #4CAF50; }
+        .log-entry.error { color: #f44336; }
+        .log-entry.info { color: #2196F3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎁 TikTok Gift Tester</h1>
+        <p class="subtitle">Bấm nút để test các hiệu ứng gift</p>
+
+        <div class="status">
+            <span class="status-indicator disconnected" id="statusDot"></span>
+            <span id="statusText">Đang kết nối...</span>
+        </div>
+
+        <div class="server-url">
+            <strong>Server:</strong> <span id="serverUrl">http://localhost:5001</span>
+        </div>
+
+        <div class="gift-buttons">
+            <button class="gift-btn rose" onclick="sendTestGift('Rose')">
+                🌹 Rose
+            </button>
+            <button class="gift-btn tiktok" onclick="sendTestGift('TikTok')">
+                📱 TikTok
+            </button>
+            <button class="gift-btn heart" onclick="sendTestGift('Heart')">
+                ❤️ Heart
+            </button>
+            <button class="gift-btn galaxy" onclick="sendTestGift('Galaxy')">
+                🌌 Galaxy
+            </button>
+        </div>
+
+        <div class="log" id="log">
+            <div class="log-entry info">Ready to test...</div>
+        </div>
+    </div>
+
+    <script>
+        const SERVER_URL = 'http://localhost:5001';
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const serverUrlEl = document.getElementById('serverUrl');
+        const logEl = document.getElementById('log');
+
+        // Update server URL display
+        serverUrlEl.textContent = SERVER_URL;
+
+        // Check server status
+        async function checkServerStatus() {
+            try {
+                const response = await fetch(`${SERVER_URL}/status`);
+                const data = await response.json();
+                
+                statusDot.classList.remove('disconnected');
+                statusDot.classList.add('connected');
+                statusText.textContent = `Connected - ${data.clients} client(s)`;
+                addLog('✅ Server connected', 'success');
+            } catch (error) {
+                statusDot.classList.remove('connected');
+                statusDot.classList.add('disconnected');
+                statusText.textContent = 'Server offline';
+                addLog('❌ Cannot connect to server', 'error');
+            }
+        }
+
+        // Send test gift
+        async function sendTestGift(giftName) {
+            addLog(`🎁 Sending ${giftName}...`, 'info');
+            
+            try {
+                const response = await fetch(`${SERVER_URL}/test-gift?gift=${giftName}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    addLog(`✅ ${giftName} sent successfully!`, 'success');
+                } else {
+                    addLog(`❌ Failed to send ${giftName}`, 'error');
+                }
+            } catch (error) {
+                addLog(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Add log entry
+        function addLog(message, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${time}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // Check status on load and every 5 seconds
+        checkServerStatus();
+        setInterval(checkServerStatus, 5000);
+
+        // Keyboard shortcut
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'r' || e.key === 'R') {
+                sendTestGift('Rose');
+            }
+        });
+
+        addLog('ℹ️ Press R key for quick Rose test', 'info');
+    </script>
+</body>
+</html>
